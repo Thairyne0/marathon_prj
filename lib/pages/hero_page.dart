@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../widgets/widgets.dart';
 
-/// The main shell page with header, left sidebar menu, right brand bar,
-/// and a central hero content area. Full cyberpunk / HUD aesthetic.
+/// BugBoard26 issue tracker dashboard page.
+/// Shell layout with sidebar, header, brand bar.
+/// Central content: scrollable landing with ticket overview,
+/// stats, recent issues feed, and workflow statement.
 class HeroPage extends StatefulWidget {
   const HeroPage({super.key});
 
@@ -14,13 +16,16 @@ class _HeroPageState extends State<HeroPage>
     with TickerProviderStateMixin {
   static const _neon = Color(0xFFC6FF00);
   static const _violet = Color(0xFF470BF6);
+  static const _cyan = Color(0xFF00D9FF);
   static const _dark = Color(0xFF111111);
 
   int _selectedMenuIndex = 0;
   bool _pixelDone = false;
+  double _scrollOffset = 0.0;
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+  late ScrollController _scrollController;
 
   @override
   void initState() {
@@ -36,11 +41,17 @@ class _HeroPageState extends State<HeroPage>
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) _fadeController.forward();
     });
+
+    _scrollController = ScrollController()
+      ..addListener(() {
+        setState(() => _scrollOffset = _scrollController.offset);
+      });
   }
 
   @override
   void dispose() {
     _fadeController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -50,7 +61,7 @@ class _HeroPageState extends State<HeroPage>
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Main content underneath
+          // Main content
           FadeTransition(
             opacity: _fadeAnimation,
             child: Row(
@@ -58,12 +69,12 @@ class _HeroPageState extends State<HeroPage>
                 // Left sidebar
                 _buildSidebar(),
 
-                // Main area (header + content)
+                // Main area
                 Expanded(
                   child: Column(
                     children: [
                       _buildHeader(),
-                      Expanded(child: _buildContent()),
+                      Expanded(child: _buildLandingContent()),
                     ],
                   ),
                 ),
@@ -74,8 +85,7 @@ class _HeroPageState extends State<HeroPage>
             ),
           ),
 
-          // Pixel transition overlay: green → black, sweeping bottom→top
-          // (the green "exits" upward from bottom, revealing the page)
+          // Pixel transition overlay
           if (!_pixelDone)
             IgnorePointer(
               child: PixelTransition(
@@ -91,6 +101,110 @@ class _HeroPageState extends State<HeroPage>
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  // ─── LANDING CONTENT ─────────────────────────────────────────────────
+  Widget _buildLandingContent() {
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        children: [
+          // Grid overlay
+          Positioned.fill(child: _buildGridOverlay()),
+
+          // Scrollable content
+          CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              // Top navbar
+              SliverToBoxAdapter(child: const TopNavbar()),
+
+              // Neon separator under navbar
+              SliverToBoxAdapter(
+                child: Container(height: 1, color: _neon.withValues(alpha: 0.08)),
+              ),
+
+              // Hero section with parallax
+              SliverToBoxAdapter(
+                child: HeroSection(scrollOffset: _scrollOffset),
+              ),
+
+              // Thin neon accent line
+              SliverToBoxAdapter(
+                child: Container(
+                  height: 2,
+                  margin: const EdgeInsets.symmetric(horizontal: 40),
+                  color: _neon.withValues(alpha: 0.12),
+                ),
+              ),
+
+              // Info panel
+              SliverToBoxAdapter(child: const InfoPanel()),
+
+              // Large title section
+              SliverToBoxAdapter(child: const LargeTitleSection()),
+
+              // Bottom footer bar
+              SliverToBoxAdapter(child: _buildFooterBar()),
+
+              // Footer spacing
+              SliverToBoxAdapter(child: const SizedBox(height: 60)),
+            ],
+          ),
+
+          // HUD corners
+          const Positioned(top: 8, left: 8, child: HudCorner(size: 20)),
+          const Positioned(top: 8, right: 8, child: HudCorner(size: 20, flipX: true)),
+          const Positioned(bottom: 8, left: 8, child: HudCorner(size: 20, flipY: true)),
+          const Positioned(bottom: 8, right: 8, child: HudCorner(size: 20, flipX: true, flipY: true)),
+        ],
+      ),
+    );
+  }
+
+  // ─── FOOTER BAR ───────────────────────────────────────────────────
+  Widget _buildFooterBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+      color: Colors.black,
+      child: Row(
+        children: [
+          _footerTag('GITHUB'),
+          const SizedBox(width: 16),
+          _footerTag('SLACK'),
+          const SizedBox(width: 16),
+          _footerTag('API'),
+          const Spacer(),
+          Text(
+            'v2.6.0 • BUGBOARD26',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.15),
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _footerTag(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.4),
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 3,
+        ),
       ),
     );
   }
@@ -126,22 +240,13 @@ class _HeroPageState extends State<HeroPage>
                   color: _neon,
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 0,
                 ),
               ),
             ),
           ),
           const SizedBox(height: 24),
-
-          // Separator
-          Container(
-            width: 24,
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.06),
-          ),
+          Container(width: 24, height: 1, color: Colors.white.withValues(alpha: 0.06)),
           const SizedBox(height: 16),
-
-          // Menu items
           ...List.generate(items.length, (i) {
             final selected = i == _selectedMenuIndex;
             return _buildSidebarIcon(
@@ -151,10 +256,7 @@ class _HeroPageState extends State<HeroPage>
               onTap: () => setState(() => _selectedMenuIndex = i),
             );
           }),
-
           const Spacer(),
-
-          // Bottom violet decorative icon
           CyberIconBox(
             icon: Icons.add,
             size: 28,
@@ -205,9 +307,7 @@ class _HeroPageState extends State<HeroPage>
             width: 64,
             height: 48,
             decoration: BoxDecoration(
-              color: selected
-                  ? _neon.withValues(alpha: 0.06)
-                  : Colors.transparent,
+              color: selected ? _neon.withValues(alpha: 0.06) : Colors.transparent,
               border: Border(
                 left: BorderSide(
                   color: selected ? _neon : Colors.transparent,
@@ -219,9 +319,7 @@ class _HeroPageState extends State<HeroPage>
               child: Icon(
                 icon,
                 size: 20,
-                color: selected
-                    ? _neon
-                    : Colors.white.withValues(alpha: 0.3),
+                color: selected ? _neon : Colors.white.withValues(alpha: 0.3),
               ),
             ),
           ),
@@ -238,8 +336,7 @@ class _HeroPageState extends State<HeroPage>
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          // Left: breadcrumb
-          Text(
+          const Text(
             'BUGBOARD26',
             style: TextStyle(
               color: _neon,
@@ -260,16 +357,11 @@ class _HeroPageState extends State<HeroPage>
               letterSpacing: 3,
             ),
           ),
-
           const Spacer(),
-
-          // Center: status indicators
           _buildStatusDot(_neon, 'ONLINE'),
           const SizedBox(width: 16),
-          _buildStatusDot(_violet, 'SYNC'),
+          _buildStatusDot(_cyan, 'SYNC'),
           const SizedBox(width: 16),
-
-          // Right: HUD labels
           Text(
             '[ SYS-26 ]',
             style: TextStyle(
@@ -280,8 +372,6 @@ class _HeroPageState extends State<HeroPage>
             ),
           ),
           const SizedBox(width: 16),
-
-          // User icon box
           CyberIconBox(
             icon: Icons.person_outline,
             size: 30,
@@ -303,12 +393,8 @@ class _HeroPageState extends State<HeroPage>
           height: 6,
           decoration: BoxDecoration(
             color: color,
-            shape: BoxShape.rectangle,
             boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: 0.5),
-                blurRadius: 6,
-              ),
+              BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 6),
             ],
           ),
         ),
@@ -334,21 +420,18 @@ class _HeroPageState extends State<HeroPage>
       child: Column(
         children: [
           const SizedBox(height: 20),
-
-          // Top decorative square block
           Container(width: 8, height: 8, color: _neon),
           const SizedBox(height: 6),
-          Container(width: 8, height: 8, decoration: BoxDecoration(border: Border.all(color: _neon.withValues(alpha: 0.3), width: 1))),
-          const SizedBox(height: 10),
           Container(
-            width: 2,
-            height: 40,
-            color: _neon.withValues(alpha: 0.15),
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              border: Border.all(color: _neon.withValues(alpha: 0.3), width: 1),
+            ),
           ),
-
+          const SizedBox(height: 10),
+          Container(width: 2, height: 40, color: _neon.withValues(alpha: 0.15)),
           const Spacer(),
-
-          // Vertical site name — large, squared, aggressive
           RotatedBox(
             quarterTurns: 1,
             child: Text(
@@ -359,30 +442,19 @@ class _HeroPageState extends State<HeroPage>
                 fontWeight: FontWeight.w900,
                 letterSpacing: 14,
                 height: 1,
-                shadows: [
-                  Shadow(
-                    color: _neon.withValues(alpha: 0.7),
-                    blurRadius: 20,
-                  ),
-                  Shadow(
-                    color: _neon.withValues(alpha: 0.35),
-                    blurRadius: 40,
-                  ),
-                ],
               ),
             ),
           ),
-
           const Spacer(),
-
-          // Bottom decorative squared elements
-          Container(
-            width: 2,
-            height: 40,
-            color: _violet.withValues(alpha: 0.2),
-          ),
+          Container(width: 2, height: 40, color: _violet.withValues(alpha: 0.2)),
           const SizedBox(height: 10),
-          Container(width: 8, height: 8, decoration: BoxDecoration(border: Border.all(color: _violet.withValues(alpha: 0.4), width: 1))),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              border: Border.all(color: _violet.withValues(alpha: 0.4), width: 1),
+            ),
+          ),
           const SizedBox(height: 6),
           Container(width: 8, height: 8, color: _violet.withValues(alpha: 0.5)),
           const SizedBox(height: 20),
@@ -391,286 +463,9 @@ class _HeroPageState extends State<HeroPage>
     );
   }
 
-  // ─── MAIN CONTENT ────────────────────────────────────────────────────
-  Widget _buildContent() {
-    return Container(
-      color: Colors.black,
-      child: Stack(
-        children: [
-          // Grid pattern background
-          Positioned.fill(child: _buildGridOverlay()),
-
-          // Main content
-          Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Hero title section
-                _buildHeroTitle(),
-                const SizedBox(height: 28),
-
-                // Stats cards row
-                Expanded(
-                  child: _buildDashboardGrid(),
-                ),
-              ],
-            ),
-          ),
-
-          // HUD corners
-          const Positioned(top: 12, left: 12, child: HudCorner()),
-          const Positioned(top: 12, right: 12, child: HudCorner(flipX: true)),
-          const Positioned(bottom: 12, left: 12, child: HudCorner(flipY: true)),
-          const Positioned(bottom: 12, right: 12, child: HudCorner(flipX: true, flipY: true)),
-        ],
-      ),
-    );
-  }
-
+  // ─── GRID OVERLAY ────────────────────────────────────────────────────
   Widget _buildGridOverlay() {
-    return CustomPaint(
-      painter: _GridOverlayPainter(),
-    );
-  }
-
-  Widget _buildHeroTitle() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(width: 3, height: 20, color: _neon),
-            const SizedBox(width: 12),
-            const Text(
-              'WELCOME BACK',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 6,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.only(left: 15),
-          child: Text(
-            'Sistema operativo • Stato: attivo • Sessione autorizzata',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.3),
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
-              letterSpacing: 2,
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.only(left: 15),
-          child: Row(
-            children: [
-              const PixelSeparator(),
-            ].map((w) => Expanded(child: w)).toList(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDashboardGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 700;
-        if (isNarrow) {
-          return SingleChildScrollView(
-            child: Column(
-              children: [
-                _buildStatCard('BUGS APERTI', '42', Icons.bug_report_outlined, _neon),
-                const SizedBox(height: 12),
-                _buildStatCard('PROGETTI', '7', Icons.code, _violet),
-                const SizedBox(height: 12),
-                _buildStatCard('TEAM', '12', Icons.people_outline, _neon),
-                const SizedBox(height: 12),
-                _buildActivityPanel(),
-              ],
-            ),
-          );
-        }
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Left column: stat cards
-            SizedBox(
-              width: 220,
-              child: Column(
-                children: [
-                  _buildStatCard('BUGS APERTI', '42', Icons.bug_report_outlined, _neon),
-                  const SizedBox(height: 12),
-                  _buildStatCard('PROGETTI', '7', Icons.code, _violet),
-                  const SizedBox(height: 12),
-                  _buildStatCard('TEAM', '12', Icons.people_outline, _neon),
-                ],
-              ),
-            ),
-            const SizedBox(width: 20),
-
-            // Right column: activity
-            Expanded(child: _buildActivityPanel()),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildStatCard(String label, String value, IconData icon, Color accent) {
-    return CyberPanel(
-      accentColor: accent,
-      headerLabel: label,
-      headerPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      bodyPadding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: accent,
-              fontSize: 40,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2,
-              shadows: [
-                Shadow(
-                  color: accent.withValues(alpha: 0.4),
-                  blurRadius: 12,
-                ),
-              ],
-            ),
-          ),
-          const Spacer(),
-          CyberIconBox(
-            icon: icon,
-            size: 40,
-            color: accent,
-            borderWidth: 1,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActivityPanel() {
-    final activities = <_ActivityEntry>[
-      _ActivityEntry('BUG-1042', 'Memory leak in auth module', 'CRITICO', _neon),
-      _ActivityEntry('BUG-1041', 'UI offset on dashboard cards', 'MEDIO', _violet),
-      _ActivityEntry('PRJ-007', 'New feature: dark mode toggle', 'BASSO', Colors.white.withValues(alpha: 0.3)),
-      _ActivityEntry('BUG-1040', 'API timeout on heavy load', 'CRITICO', _neon),
-      _ActivityEntry('BUG-1039', 'Font rendering glitch', 'MEDIO', _violet),
-    ];
-
-    return CyberPanel(
-      headerLabel: 'ATTIVITÀ RECENTI',
-      headerTag: 'LIVE',
-      bodyPadding: EdgeInsets.zero,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(activities.length, (i) {
-          final a = activities[i];
-          return _buildActivityRow(a, isLast: i == activities.length - 1);
-        }),
-      ),
-    );
-  }
-
-  Widget _buildActivityRow(_ActivityEntry entry, {bool isLast = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        border: isLast
-            ? null
-            : Border(
-                bottom: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.04),
-                  width: 1,
-                ),
-              ),
-      ),
-      child: Row(
-        children: [
-          // Status dot
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: entry.statusColor,
-              boxShadow: [
-                BoxShadow(
-                  color: entry.statusColor.withValues(alpha: 0.5),
-                  blurRadius: 4,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // ID tag
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
-              ),
-            ),
-            child: Text(
-              entry.id,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Description
-          Expanded(
-            child: Text(
-              entry.description,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                letterSpacing: 1,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Priority tag
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: entry.statusColor.withValues(alpha: 0.1),
-              border: Border.all(
-                color: entry.statusColor.withValues(alpha: 0.2),
-              ),
-            ),
-            child: Text(
-              entry.priority,
-              style: TextStyle(
-                color: entry.statusColor,
-                fontSize: 8,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    return CustomPaint(painter: _GridOverlayPainter());
   }
 }
 
@@ -682,13 +477,6 @@ class _SidebarItem {
   _SidebarItem(this.icon, this.label);
 }
 
-class _ActivityEntry {
-  final String id;
-  final String description;
-  final String priority;
-  final Color statusColor;
-  _ActivityEntry(this.id, this.description, this.priority, this.statusColor);
-}
 
 // ─── GRID OVERLAY PAINTER ─────────────────────────────────────────────────
 
@@ -696,16 +484,13 @@ class _GridOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.02)
+      ..color = Colors.white.withValues(alpha: 0.015)
       ..strokeWidth = 0.5;
 
-    const spacing = 40.0;
-
-    // Vertical lines
+    const spacing = 50.0;
     for (double x = 0; x < size.width; x += spacing) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
-    // Horizontal lines
     for (double y = 0; y < size.height; y += spacing) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
@@ -714,8 +499,4 @@ class _GridOverlayPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-
-
-
-
 

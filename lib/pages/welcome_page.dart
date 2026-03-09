@@ -106,21 +106,6 @@ class _WelcomePageState extends State<WelcomePage>
           t,
         )!;
 
-        final shadows = t > 0.5
-            ? [
-                Shadow(
-                  color: const Color(0xFFC6FF00)
-                      .withValues(alpha: (t - 0.5) * 2 * 0.8),
-                  blurRadius: 20,
-                ),
-                Shadow(
-                  color: const Color(0xFFC6FF00)
-                      .withValues(alpha: (t - 0.5) * 2 * 0.4),
-                  blurRadius: 40,
-                ),
-              ]
-            : <Shadow>[];
-
         return SlideTransition(
           position: _titleSlideAnimation,
           child: Center(
@@ -133,7 +118,6 @@ class _WelcomePageState extends State<WelcomePage>
                 color: textColor,
                 letterSpacing: 12,
                 height: 1,
-                shadows: shadows,
               ),
             ),
           ),
