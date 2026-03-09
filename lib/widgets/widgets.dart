@@ -14,4 +14,5 @@ export 'cards/cyber_panel.dart';
 // Decorations
 export 'decorations/hud_corner.dart';
 export 'decorations/pixel_separator.dart';
+export 'decorations/cyber_icon_box.dart';
 

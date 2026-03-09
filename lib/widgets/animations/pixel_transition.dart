@@ -2,13 +2,22 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 
-/// Direction of the pixel transition.
+/// Direction of the pixel transition (color).
 enum PixelTransitionDirection {
   /// Green → Black (intro / "in")
   greenToBlack,
 
   /// Black → Green (outro / "out")
   blackToGreen,
+}
+
+/// Spatial sweep direction for how pixels propagate across the screen.
+enum PixelSweepDirection {
+  /// Pixels flip from top rows to bottom rows.
+  topToBottom,
+
+  /// Pixels flip from bottom rows to top rows.
+  bottomToTop,
 }
 
 /// A fullscreen pixel-dissolve transition overlay.
@@ -27,6 +36,7 @@ class PixelTransition extends StatefulWidget {
   const PixelTransition({
     super.key,
     this.direction = PixelTransitionDirection.greenToBlack,
+    this.sweepDirection,
     this.autoStart = true,
     this.startDelay = const Duration(milliseconds: 0),
     this.pixelInterval = const Duration(milliseconds: 6),
@@ -40,6 +50,11 @@ class PixelTransition extends StatefulWidget {
 
   /// Whether the transition is green→black or black→green.
   final PixelTransitionDirection direction;
+
+  /// Spatial sweep direction. If null, defaults to:
+  ///  - topToBottom for greenToBlack
+  ///  - bottomToTop for blackToGreen
+  final PixelSweepDirection? sweepDirection;
 
   /// Whether to start automatically on mount.
   final bool autoStart;
@@ -103,17 +118,20 @@ class PixelTransitionState extends State<PixelTransition> {
 
   void _buildShuffledIndices() {
     final random = Random(42);
-    final isTopDown =
-        widget.direction == PixelTransitionDirection.greenToBlack;
+    // Resolve effective sweep: explicit or default based on color direction
+    final sweep = widget.sweepDirection ??
+        (widget.direction == PixelTransitionDirection.greenToBlack
+            ? PixelSweepDirection.topToBottom
+            : PixelSweepDirection.bottomToTop);
+
+    final isTopDown = sweep == PixelSweepDirection.topToBottom;
 
     _shuffledIndices.sort((a, b) {
       final rowA = a ~/ widget.cols;
       final rowB = b ~/ widget.cols;
       if (isTopDown) {
-        // Top-to-bottom bias
         return (rowA + random.nextInt(8)) - (rowB + random.nextInt(8));
       } else {
-        // Bottom-to-top bias for reverse
         return (rowB + random.nextInt(8)) - (rowA + random.nextInt(8));
       }
     });
@@ -231,12 +249,9 @@ class _PixelGridPainter extends CustomPainter {
     final isGreenToBlack =
         direction == PixelTransitionDirection.greenToBlack;
 
-    // Determine base and overlay colors
-    final baseColor = isGreenToBlack ? accentColor : Colors.black;
-    final overlayColor = isGreenToBlack ? Colors.black : accentColor;
-
     if (!started) {
       // Initial state: solid base color
+      final baseColor = isGreenToBlack ? accentColor : Colors.black;
       canvas.drawRect(
         Rect.fromLTWH(0, 0, size.width, size.height),
         Paint()..color = baseColor,
@@ -244,27 +259,49 @@ class _PixelGridPainter extends CustomPainter {
       return;
     }
 
-    // Draw base
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = baseColor,
-    );
+    if (isGreenToBlack) {
+      // Green→Black used as dissolving overlay:
+      // Draw only the cells that have NOT been flipped yet (still green).
+      // Flipped cells are left transparent → content underneath shows through.
+      final greenPaint = Paint()..color = accentColor;
+      for (int i = 0; i < pixelState.length; i++) {
+        if (!pixelState[i]) {
+          final col = i % cols;
+          final row = i ~/ cols;
+          canvas.drawRect(
+            Rect.fromLTWH(
+              col * cellWidth,
+              row * cellHeight,
+              cellWidth + 0.5,
+              cellHeight + 0.5,
+            ),
+            greenPaint,
+          );
+        }
+      }
+    } else {
+      // Black→Green: pixels appear as green overlay on top of content.
+      // Draw base black, then paint flipped cells as green.
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        Paint()..color = Colors.black,
+      );
 
-    // Draw flipped cells with overlay color
-    final overlayPaint = Paint()..color = overlayColor;
-    for (int i = 0; i < pixelState.length; i++) {
-      if (pixelState[i]) {
-        final col = i % cols;
-        final row = i ~/ cols;
-        canvas.drawRect(
-          Rect.fromLTWH(
-            col * cellWidth,
-            row * cellHeight,
-            cellWidth + 0.5,
-            cellHeight + 0.5,
-          ),
-          overlayPaint,
-        );
+      final overlayPaint = Paint()..color = accentColor;
+      for (int i = 0; i < pixelState.length; i++) {
+        if (pixelState[i]) {
+          final col = i % cols;
+          final row = i ~/ cols;
+          canvas.drawRect(
+            Rect.fromLTWH(
+              col * cellWidth,
+              row * cellHeight,
+              cellWidth + 0.5,
+              cellHeight + 0.5,
+            ),
+            overlayPaint,
+          );
+        }
       }
     }
   }
