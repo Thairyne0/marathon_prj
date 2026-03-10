@@ -77,14 +77,16 @@ class _WelcomePageState extends State<WelcomePage>
       body: Stack(
         children: [
           // Layer 1: Pixel transition overlay
-          PixelTransition(
-            key: _pixelKey,
-            direction: PixelTransitionDirection.greenToBlack,
-            autoStart: true,
-            startDelay: const Duration(milliseconds: 2000),
-            pixelInterval: const Duration(milliseconds: 6),
-            batchSize: 4,
-            onTransitionPercent: _onPixelProgress,
+          Positioned.fill(
+            child: PixelTransition(
+              key: _pixelKey,
+              direction: PixelTransitionDirection.greenToBlack,
+              autoStart: true,
+              startDelay: const Duration(milliseconds: 2000),
+              pixelInterval: const Duration(milliseconds: 6),
+              batchSize: 4,
+              onTransitionPercent: _onPixelProgress,
+            ),
           ),
 
           // Layer 2: Centered title

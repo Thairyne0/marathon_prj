@@ -199,7 +199,7 @@ class PixelTransitionState extends State<PixelTransition> {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
+    return SizedBox.expand(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final cellW = constraints.maxWidth / widget.cols;

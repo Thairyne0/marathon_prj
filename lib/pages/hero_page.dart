@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../widgets/widgets.dart';
 
 /// BugBoard26 issue tracker dashboard page.
@@ -87,17 +88,19 @@ class _HeroPageState extends State<HeroPage>
 
           // Pixel transition overlay
           if (!_pixelDone)
-            IgnorePointer(
-              child: PixelTransition(
-                direction: PixelTransitionDirection.greenToBlack,
-                sweepDirection: PixelSweepDirection.bottomToTop,
-                autoStart: true,
-                startDelay: const Duration(milliseconds: 200),
-                pixelInterval: const Duration(milliseconds: 5),
-                batchSize: 6,
-                onPhaseComplete: () {
-                  if (mounted) setState(() => _pixelDone = true);
-                },
+            Positioned.fill(
+              child: IgnorePointer(
+                child: PixelTransition(
+                  direction: PixelTransitionDirection.greenToBlack,
+                  sweepDirection: PixelSweepDirection.bottomToTop,
+                  autoStart: true,
+                  startDelay: const Duration(milliseconds: 200),
+                  pixelInterval: const Duration(milliseconds: 5),
+                  batchSize: 6,
+                  onPhaseComplete: () {
+                    if (mounted) setState(() => _pixelDone = true);
+                  },
+                ),
               ),
             ),
         ],
@@ -212,12 +215,12 @@ class _HeroPageState extends State<HeroPage>
   // ─── LEFT SIDEBAR ────────────────────────────────────────────────────
   Widget _buildSidebar() {
     final items = <_SidebarItem>[
-      _SidebarItem(Icons.dashboard_outlined, 'DASHBOARD'),
-      _SidebarItem(Icons.bug_report_outlined, 'BUGS'),
-      _SidebarItem(Icons.code, 'PROJECTS'),
-      _SidebarItem(Icons.people_outline, 'TEAM'),
-      _SidebarItem(Icons.analytics_outlined, 'ANALYTICS'),
-      _SidebarItem(Icons.settings_outlined, 'SETTINGS'),
+      _SidebarItem(Icons.dashboard_outlined, 'DASHBOARD', null),
+      _SidebarItem(Icons.bug_report_outlined, 'TICKETS', '/tickets'),
+      _SidebarItem(Icons.code, 'PROJECTS', null),
+      _SidebarItem(Icons.people_outline, 'TEAM', null),
+      _SidebarItem(Icons.analytics_outlined, 'ANALYTICS', null),
+      _SidebarItem(Icons.settings_outlined, 'SETTINGS', null),
     ];
 
     return Container(
@@ -226,7 +229,6 @@ class _HeroPageState extends State<HeroPage>
       child: Column(
         children: [
           const SizedBox(height: 16),
-          // Logo icon
           Container(
             width: 36,
             height: 36,
@@ -253,7 +255,12 @@ class _HeroPageState extends State<HeroPage>
               icon: items[i].icon,
               label: items[i].label,
               selected: selected,
-              onTap: () => setState(() => _selectedMenuIndex = i),
+              onTap: () {
+                setState(() => _selectedMenuIndex = i);
+                if (items[i].route != null) {
+                  context.go(items[i].route!);
+                }
+              },
             );
           }),
           const Spacer(),
@@ -474,7 +481,8 @@ class _HeroPageState extends State<HeroPage>
 class _SidebarItem {
   final IconData icon;
   final String label;
-  _SidebarItem(this.icon, this.label);
+  final String? route;
+  _SidebarItem(this.icon, this.label, this.route);
 }
 
 

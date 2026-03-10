@@ -182,16 +182,18 @@ class _LoginPageState extends State<LoginPage>
 
           // Pixel transition overlay (activated on login)
           if (_transitioning)
-            PixelTransition(
-              direction: PixelTransitionDirection.blackToGreen,
-              sweepDirection: PixelSweepDirection.bottomToTop,
-              autoStart: true,
-              startDelay: Duration.zero,
-              pixelInterval: const Duration(milliseconds: 5),
-              batchSize: 6,
-              onPhaseComplete: () {
-                if (mounted) context.go('/hero');
-              },
+            Positioned.fill(
+              child: PixelTransition(
+                direction: PixelTransitionDirection.blackToGreen,
+                sweepDirection: PixelSweepDirection.bottomToTop,
+                autoStart: true,
+                startDelay: Duration.zero,
+                pixelInterval: const Duration(milliseconds: 5),
+                batchSize: 6,
+                onPhaseComplete: () {
+                  if (mounted) context.go('/hero');
+                },
+              ),
             ),
         ],
       ),
