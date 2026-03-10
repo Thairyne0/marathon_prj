@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../models/ticket.dart';
 import '../models/ai_conversation.dart';
+import '../models/chat_message.dart';
 import '../services/lm_studio_service.dart';
 import '../widgets/widgets.dart';
 
@@ -32,8 +33,14 @@ class _TicketsPageState extends State<TicketsPage>
   final _messageController = TextEditingController();
   final _chatScrollController = ScrollController();
   bool _aiLoading = false;
-  String? _lastAiResponse;
   final List<AiConversation> _history = [];
+
+  // Chat persistente per ogni ticket (ticketId -> lista messaggi)
+  final Map<String, List<ChatMessage>> _chatMessages = {};
+
+  /// Restituisce i messaggi della chat per il ticket selezionato.
+  List<ChatMessage> get _currentChat =>
+      _chatMessages[_selectedTicket?.id] ?? [];
 
   @override
   void initState() {
@@ -63,42 +70,74 @@ class _TicketsPageState extends State<TicketsPage>
     if (_selectedTicket == null) return;
     final ticket = _selectedTicket!;
     final userMsg = _messageController.text.trim();
+    final displayMsg = userMsg.isEmpty ? '[Analisi automatica]' : userMsg;
 
+    // Inizializza la lista chat se non esiste
+    _chatMessages.putIfAbsent(ticket.id, () => []);
+
+    // Aggiungi il messaggio dell'utente alla chat
     setState(() {
+      _chatMessages[ticket.id]!.add(ChatMessage(
+        role: 'user',
+        content: displayMsg,
+        timestamp: DateTime.now(),
+      ));
       _aiLoading = true;
-      _lastAiResponse = null;
+      _messageController.clear();
     });
 
+    _scrollToBottom();
+
     try {
-      final response = await LmStudioService.analyzeTicket(
+      final response = await LmStudioService.chatWithContext(
         ticketId: ticket.id,
         ticketTitle: ticket.title,
         ticketDescription: ticket.description,
         userMessage: userMsg,
+        chatHistory: _chatMessages[ticket.id]!,
       );
 
       setState(() {
-        _lastAiResponse = response;
+        _chatMessages[ticket.id]!.add(ChatMessage(
+          role: 'ai',
+          content: response,
+          timestamp: DateTime.now(),
+        ));
         _history.insert(
           0,
           AiConversation(
             ticketId: ticket.id,
             ticketTitle: ticket.title,
-            userMessage:
-                userMsg.isEmpty ? '[Analisi automatica]' : userMsg,
+            userMessage: displayMsg,
             aiResponse: response,
             timestamp: DateTime.now(),
           ),
         );
-        _messageController.clear();
       });
     } catch (e) {
       setState(() {
-        _lastAiResponse = 'ERRORE: $e';
+        _chatMessages[ticket.id]!.add(ChatMessage(
+          role: 'ai',
+          content: 'ERRORE: $e',
+          timestamp: DateTime.now(),
+        ));
       });
     } finally {
       setState(() => _aiLoading = false);
+      _scrollToBottom();
     }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_chatScrollController.hasClients) {
+        _chatScrollController.animateTo(
+          _chatScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
@@ -248,7 +287,6 @@ class _TicketsPageState extends State<TicketsPage>
     return GestureDetector(
       onTap: () => setState(() {
         _selectedTicket = ticket;
-        _lastAiResponse = null;
       }),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
@@ -514,103 +552,273 @@ class _TicketsPageState extends State<TicketsPage>
   }
 
   Widget _buildResponseArea() {
+    final messages = _currentChat;
+
+    if (messages.isEmpty && !_aiLoading) {
+      return Container(
+        color: Colors.black,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.smart_toy_outlined,
+                size: 36,
+                color: Colors.white.withValues(alpha: 0.06),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'INVIA IL TICKET ALL\'AI PER ANALIZZARLO',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 3,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Lascia vuoto il messaggio per un\'analisi automatica',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  fontSize: 9,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       color: Colors.black,
-      child: _aiLoading
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        _neon.withValues(alpha: 0.6),
+      child: ListView.builder(
+        controller: _chatScrollController,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        itemCount: messages.length + (_aiLoading ? 1 : 0),
+        itemBuilder: (context, i) {
+          // Indicatore di caricamento alla fine
+          if (i == messages.length) {
+            return _buildLoadingBubble();
+          }
+          return _buildChatBubble(messages[i]);
+        },
+      ),
+    );
+  }
+
+  Widget _buildChatBubble(ChatMessage msg) {
+    if (msg.isUser) {
+      return _buildUserBubble(msg);
+    }
+    return _buildAiBubble(msg);
+  }
+
+  Widget _buildUserBubble(ChatMessage msg) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Spacer(),
+          Flexible(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Label
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'TU',
+                      style: TextStyle(
+                        color: _neon.withValues(alpha: 0.4),
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 3,
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${msg.timestamp.hour.toString().padLeft(2, '0')}:'
+                      '${msg.timestamp.minute.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        fontSize: 8,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Bubble
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _neon.withValues(alpha: 0.06),
+                    border: Border(
+                      left: BorderSide(color: _neon.withValues(alpha: 0.3), width: 2),
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'AI STA ANALIZZANDO...',
+                  child: SelectableText(
+                    msg.content,
                     style: TextStyle(
-                      color: _neon.withValues(alpha: 0.3),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 4,
+                      color: Colors.white.withValues(alpha: 0.75),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.6,
+                      letterSpacing: 0.3,
                     ),
                   ),
-                ],
-              ),
-            )
-          : _lastAiResponse != null
-              ? SingleChildScrollView(
-                  controller: _chatScrollController,
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(width: 3, height: 12, color: _cyan),
-                          const SizedBox(width: 8),
-                          Text(
-                            'RISPOSTA AI',
-                            style: TextStyle(
-                              color: _cyan.withValues(alpha: 0.5),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 4,
-                            ),
-                          ),
-                        ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiBubble(ChatMessage msg) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Flexible(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Label
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 3, height: 10, color: _cyan),
+                    const SizedBox(width: 6),
+                    Text(
+                      'AI',
+                      style: TextStyle(
+                        color: _cyan.withValues(alpha: 0.4),
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 3,
                       ),
-                      const SizedBox(height: 16),
-                      SelectableText(
-                        _lastAiResponse!,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          height: 1.8,
-                          letterSpacing: 0.3,
-                        ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${msg.timestamp.hour.toString().padLeft(2, '0')}:'
+                      '${msg.timestamp.minute.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        fontSize: 8,
+                        letterSpacing: 1,
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Bubble
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A0A0A),
+                    border: Border(
+                      left: BorderSide(color: _cyan.withValues(alpha: 0.2), width: 2),
+                    ),
                   ),
-                )
-              : Center(
-                  child: Column(
+                  child: SelectableText(
+                    msg.content,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.65),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      height: 1.7,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingBubble() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Flexible(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 3, height: 10, color: _cyan),
+                    const SizedBox(width: 6),
+                    Text(
+                      'AI',
+                      style: TextStyle(
+                        color: _cyan.withValues(alpha: 0.4),
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 3,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A0A0A),
+                    border: Border(
+                      left: BorderSide(color: _cyan.withValues(alpha: 0.2), width: 2),
+                    ),
+                  ),
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.smart_toy_outlined,
-                        size: 36,
-                        color: Colors.white.withValues(alpha: 0.06),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'INVIA IL TICKET ALL\'AI PER ANALIZZARLO',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 3,
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            _cyan.withValues(alpha: 0.4),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(width: 10),
                       Text(
-                        'Lascia vuoto il messaggio per un\'analisi automatica',
+                        'ANALIZZANDO...',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.08),
+                          color: _cyan.withValues(alpha: 0.3),
                           fontSize: 9,
-                          letterSpacing: 1,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 3,
                         ),
                       ),
                     ],
                   ),
                 ),
+              ],
+            ),
+          ),
+          const Spacer(),
+        ],
+      ),
     );
   }
 
@@ -729,7 +937,12 @@ class _TicketsPageState extends State<TicketsPage>
 
     return GestureDetector(
       onTap: () {
-        setState(() => _lastAiResponse = conv.aiResponse);
+        // Seleziona il ticket corrispondente e mostra la sua chat
+        final ticket = sampleTickets.where((t) => t.id == conv.ticketId).firstOrNull;
+        if (ticket != null) {
+          setState(() => _selectedTicket = ticket);
+          _scrollToBottom();
+        }
       },
       child: MouseRegion(
         cursor: SystemMouseCursors.click,

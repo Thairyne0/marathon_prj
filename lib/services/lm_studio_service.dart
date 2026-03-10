@@ -1,67 +1,81 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/chat_message.dart';
 
 /// Service per comunicare con LM Studio locale via REST API.
 class LmStudioService {
   // Cambia in 10.0.2.2 per emulatore Android
   static const String _baseUrl = 'http://127.0.0.1:1234';
 
-  /// Invia il contenuto di un ticket e un messaggio opzionale dell'utente
-  /// all'LLM e restituisce la risposta.
+  static const String _systemPrompt =
+      '/no_think\n'
+      'Sei un assistente tecnico esperto di sviluppo software e bug tracking. '
+      'Analizza i ticket che ti vengono inviati e fornisci risposte chiare, '
+      'concise e strutturate. '
+      'REGOLE IMPORTANTI:\n'
+      '- Rispondi SOLO in italiano.\n'
+      '- NON usare tag <think> o blocchi di ragionamento.\n'
+      '- NON mostrare mai il tuo processo di pensiero interno.\n'
+      '- Vai DRITTO alla risposta utile.\n'
+      '- Sii conciso e pratico.';
+
+  /// Invia il contenuto di un ticket con l'intera cronologia di chat
+  /// e restituisce la risposta AI.
   ///
-  /// Se [userMessage] è vuoto, l'AI spiega semplicemente il problema del ticket.
-  static Future<String> analyzeTicket({
+  /// [chatHistory] contiene tutti i messaggi precedenti della conversazione.
+  /// Se [userMessage] è vuoto alla prima interazione, l'AI analizza il ticket.
+  static Future<String> chatWithContext({
     required String ticketId,
     required String ticketTitle,
     required String ticketDescription,
-    String userMessage = '',
+    required String userMessage,
+    List<ChatMessage> chatHistory = const [],
   }) async {
-    final systemPrompt =
-        '/no_think\n'
-        'Sei un assistente tecnico esperto di sviluppo software e bug tracking. '
-        'Analizza i ticket che ti vengono inviati e fornisci risposte chiare, '
-        'concise e strutturate. '
-        'REGOLE IMPORTANTI:\n'
-        '- Rispondi SOLO in italiano.\n'
-        '- NON usare tag <think> o blocchi di ragionamento.\n'
-        '- NON mostrare mai il tuo processo di pensiero interno.\n'
-        '- Vai DRITTO alla risposta utile.\n'
-        '- Usa questa struttura:\n'
-        '  1. PROBLEMA: spiega il problema in modo chiaro\n'
-        '  2. POSSIBILI CAUSE: elenca le cause probabili\n'
-        '  3. SOLUZIONE: suggerisci come risolvere\n'
-        '- Sii conciso e pratico.';
-
     final ticketContent =
         '--- TICKET $ticketId ---\n'
         'Titolo: $ticketTitle\n'
         'Descrizione: $ticketDescription\n'
         '--- FINE TICKET ---';
 
-    final String userPrompt;
-    if (userMessage.trim().isEmpty) {
-      userPrompt =
-          '$ticketContent\n\n'
+    // Costruisci la lista messaggi per l'LLM
+    final messages = <Map<String, String>>[
+      {'role': 'system', 'content': _systemPrompt},
+      // Primo messaggio: contesto del ticket
+      {
+        'role': 'user',
+        'content': '$ticketContent\n\nQuesto è il ticket su cui stiamo lavorando.',
+      },
+    ];
+
+    // Aggiungi la cronologia chat (messaggi precedenti)
+    for (final msg in chatHistory) {
+      messages.add({
+        'role': msg.isUser ? 'user' : 'assistant',
+        'content': msg.content,
+      });
+    }
+
+    // Aggiungi il messaggio corrente dell'utente
+    final String currentPrompt;
+    if (chatHistory.isEmpty && userMessage.trim().isEmpty) {
+      currentPrompt =
           'Analizza questo ticket. Rispondi direttamente in italiano con: '
           '1) Il problema probabile, 2) Le possibili cause, 3) La soluzione suggerita. '
           'Non mostrare ragionamenti interni.';
+    } else if (userMessage.trim().isEmpty) {
+      currentPrompt = 'Continua l\'analisi. Rispondi in italiano.';
     } else {
-      userPrompt =
-          '$ticketContent\n\n'
-          'Domanda dell\'utente: $userMessage\n\n'
-          'Rispondi direttamente in italiano. Non mostrare ragionamenti interni.';
+      currentPrompt =
+          '$userMessage\n\nRispondi in italiano. Non mostrare ragionamenti interni.';
     }
+    messages.add({'role': 'user', 'content': currentPrompt});
 
     final body = {
-      'messages': [
-        {'role': 'system', 'content': systemPrompt},
-        {'role': 'user', 'content': userPrompt},
-      ],
+      'messages': messages,
       'temperature': 0.4,
       'max_tokens': 4096,
     };
 
-    // Prova prima l'API nativa v1, poi fallback su OpenAI-compat
     try {
       final raw = await _postChat('$_baseUrl/api/v1/chat', body);
       return _cleanResponse(raw);
